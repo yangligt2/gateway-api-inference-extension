@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"sigs.k8s.io/gateway-api-inference-extension/internal/health"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
@@ -144,6 +145,10 @@ var (
 		"config-text",
 		runserver.DefaultConfigText,
 		"The configuration specified as text, in lieu of a file")
+	leaderAwareHealthChecks = flag.Bool(
+		"leader-aware-health-checks",
+		false,
+		"When enabled, health checks will pass only on the leader. This should be used in active-passive deployments.")
 
 	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
 		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
@@ -190,8 +195,9 @@ func bindEnvToFlags() {
 		"POOL_NAME":                                       "pool-name",
 		"POOL_NAMESPACE":                                  "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
-		"SECURE_SERVING":           "secure-serving",
+		"REFRESH_METRICS_INTERVAL":   "refresh-metrics-interval",
+		"SECURE_SERVING":             "secure-serving",
+		"LEADER_AWARE_HEALTH_CHECKS": "leader-aware-health-checks",
 	} {
 		if v := os.Getenv(env); v != "" {
 			// ignore error; Parse() will catch invalid values later
@@ -326,6 +332,13 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
+	// --- Initialize Health Checker
+	healthChecker := health.NewChecker(datastore, *leaderAwareHealthChecks, ctrl.Log.WithName("health"))
+	if err := mgr.Add(healthChecker); err != nil {
+		setupLog.Error(err, "Failed to register health checker")
+		return err
+	}
+
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
@@ -335,6 +348,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		HealthChecking:                           *healthChecking,
+		LeaderElectionEnabled:                    *leaderAwareHealthChecks,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
 		Director:                                 director,
@@ -347,7 +361,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, healthChecker, *grpcHealthPort); err != nil {
 		return err
 	}
 
@@ -448,12 +462,14 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int) error {
+func registerHealthServer(mgr manager.Manager, checker *health.Checker, port int) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
-		logger:    logger,
-		datastore: ds,
+		checker: checker,
 	})
+
+	// The health server should not be leader-elected. Its health check will determine
+	// the readiness of the pod.
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {
 		setupLog.Error(err, "Failed to register health server")

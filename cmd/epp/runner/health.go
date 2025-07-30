@@ -20,34 +20,19 @@ import (
 	"context"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/internal/health"
 )
 
 type healthServer struct {
-	logger    logr.Logger
-	datastore datastore.Datastore
+	checker *health.Checker
 }
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
-	// TODO: we're accepting ANY service name for now as a temporary hack in alignment with
-	// upstream issues. See https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/788
-	// if in.Service != extProcPb.ExternalProcessor_ServiceDesc.ServiceName {
-	// 	s.logger.V(logutil.DEFAULT).Info("gRPC health check requested unknown service", "available-services", []string{extProcPb.ExternalProcessor_ServiceDesc.ServiceName}, "requested-service", in.Service)
-	// 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVICE_UNKNOWN}, nil
-	// }
-
-	if !s.datastore.PoolHasSynced() {
-		s.logger.V(logutil.DEFAULT).Info("gRPC health check not serving", "service", in.Service)
-		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
-	}
-	s.logger.V(logutil.TRACE).Info("gRPC health check serving", "service", in.Service)
-	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
+	return s.checker.Check(ctx, in)
 }
 
 func (s *healthServer) List(ctx context.Context, _ *healthPb.HealthListRequest) (*healthPb.HealthListResponse, error) {

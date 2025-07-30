@@ -50,6 +50,7 @@ type ExtProcServerRunner struct {
 	Datastore                                datastore.Datastore
 	SecureServing                            bool
 	HealthChecking                           bool
+	LeaderElectionEnabled                    bool
 	CertPath                                 string
 	RefreshPrometheusMetricsInterval         time.Duration
 	Director                                 *requestcontrol.Director
@@ -127,7 +128,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 // AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
-	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
+	runnableFunc := manager.RunnableFunc(func(ctx context.Context) error {
 		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval)
 		var srv *grpc.Server
 		if r.SecureServing {
@@ -176,5 +177,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
-	}))
+	})
+
+	return runnable.LeaderElection(runnableFunc, r.LeaderElectionEnabled)
 }
