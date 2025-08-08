@@ -69,7 +69,7 @@ func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckReques
 		checkName = "liveness"
 		// Any pod that is running and can respond to this gRPC check is considered "live".
 		// The datastore sync status should not affect liveness, only readiness.
-		// This is to prevent the non-leader node from continurouse restarts
+		// This is to prevent the non-leader node from continuous restarts
 		isPassing = true
 	case extProcPb.ExternalProcessor_ServiceDesc.ServiceName:
 		// The main service is considered ready only on the leader.
