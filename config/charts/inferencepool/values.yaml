@@ -34,6 +34,8 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+  # Enable leader election for high availability. When enabled, it is recommended to set replicas > 1.
+  # Only the leader pod will be ready to serve traffic.
   enableLeaderElection: false
 
 inferencePool:

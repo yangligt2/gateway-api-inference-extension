@@ -72,7 +72,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
-			verifyTrafficRouting(infObjective)
+			verifyTrafficRouting()
 		})
 
 		ginkgo.It("Should expose EPP metrics after generating traffic", func() {
@@ -113,7 +113,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			}
 
 			ginkgo.By("STEP 1: Verifying initial leader is working correctly before failover")
-			verifyTrafficRouting(infObjective)
+			verifyTrafficRouting()
 			verifyMetrics()
 
 			ginkgo.By("STEP 2: Finding and deleting the current leader pod")
@@ -156,7 +156,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			ginkgo.By("Found new leader pod: " + newLeaderPod.Name)
 
 			ginkgo.By("STEP 5: Verifying the new leader is working correctly after failover")
-			verifyTrafficRouting(infObjective)
+			verifyTrafficRouting()
 			verifyMetrics()
 		})
 	})
@@ -171,7 +171,7 @@ func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 }
 
 // verifyTrafficRouting contains the logic for the "Should route traffic to target model servers" test.
-func verifyTrafficRouting(infObjective *v1alpha2.InferenceObjective) {
+func verifyTrafficRouting() {
 	ginkgo.By("Verifying traffic routing")
 	for _, t := range []struct {
 		api              string
