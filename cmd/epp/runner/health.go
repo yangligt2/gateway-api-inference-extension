@@ -66,7 +66,7 @@ func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckReques
 		checkName = "readiness"
 		isPassing = isLive && s.isLeader.Load()
 	case "": // Handle overall server health for load balancers that use an empty service name.
-		checkName = "overall(empty string)"
+		checkName = "empty service name (considered as overall health)"
 		// The overall health for a load balancer should reflect readiness to accept traffic,
 		// which is true only for the leader pod that has synced its data.
 		isPassing = isLive && s.isLeader.Load()
